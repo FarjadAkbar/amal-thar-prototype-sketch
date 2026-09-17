@@ -71,7 +71,7 @@ export function BuildPalette({
         ))}
       </div>
       <p className="palette-hint">{meta.hint}</p>
-      <p className="palette-how">Rough is fine. Drag onto the map, then sketch it.</p>
+      <p className="palette-how">Drop on the map. Grab the stamp afterward to move it.</p>
       <div className="palette-row">
         {items.map((item) => {
           const used = placements.filter((p) => p.type === item.type).length;

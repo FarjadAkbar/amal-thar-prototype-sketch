@@ -1,7 +1,6 @@
 "use client";
 
 import type { PointerEvent, Ref } from "react";
-import { useRef, useState } from "react";
 import { interventionOf } from "@/lib/sim";
 import {
   BAZAAR,
@@ -55,10 +54,6 @@ type Props = {
   svgRef?: Ref<SVGSVGElement>;
   onHover: (point: Pt | null) => void;
   onHit: (hit: MapHit) => void;
-  onPick?: (id: string) => void;
-  onMove?: (id: string, point: Pt) => void;
-  onMoveEnd?: () => void;
-  onStay?: (id: string) => void;
 };
 
 const HIDDEN = new Set<InterventionType>(["pipeline", "road"]);
@@ -271,106 +266,19 @@ export function VillageMap({
   svgRef,
   onHover,
   onHit,
-  onPick,
-  onMove,
-  onMoveEnd,
-  onStay,
 }: Props) {
   const functional = new Set(functionalIds);
   const hasRoad = placements.some((item) => item.type === "road" && functional.has(item.id));
   const pipes = placements.filter((item) => item.type === "pipeline");
   const highlightRoad = tool === "road";
-  const movingId = useRef<string | null>(null);
-  const didMove = useRef(false);
-  const startPt = useRef<Pt | null>(null);
-  const unbindMove = useRef<(() => void) | null>(null);
-  const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
-  const dragPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
-
-  const onHoverRef = useRef(onHover);
-  const onMoveRef = useRef(onMove);
-  const onMoveEndRef = useRef(onMoveEnd);
-  const onPickRef = useRef(onPick);
-  const onStayRef = useRef(onStay);
-  onHoverRef.current = onHover;
-  onMoveRef.current = onMove;
-  onMoveEndRef.current = onMoveEnd;
-  onPickRef.current = onPick;
-  onStayRef.current = onStay;
-
-  function clearMoveListeners() {
-    unbindMove.current?.();
-    unbindMove.current = null;
-  }
-
-  function endMove() {
-    if (!movingId.current) return false;
-    const id = movingId.current;
-    const moved = didMove.current;
-    const finalPos = dragPosRef.current;
-    movingId.current = null;
-    startPt.current = null;
-    didMove.current = false;
-    dragPosRef.current = null;
-    clearMoveListeners();
-    document.body.style.cursor = "";
-    setDragPos(null);
-    if (moved && finalPos) {
-      onMoveRef.current?.(id, { x: finalPos.x, y: finalPos.y });
-      onMoveEndRef.current?.();
-    } else {
-      onStayRef.current?.(id);
-    }
-    return true;
-  }
-
-  function beginMove(svg: SVGSVGElement, id: string, pointerId: number, clientX: number, clientY: number) {
-    clearMoveListeners();
-    movingId.current = id;
-    didMove.current = false;
-    startPt.current = svgCoords(svg, clientX, clientY);
-    document.body.style.cursor = "grabbing";
-    onPickRef.current?.(id);
-
-    const onWinMove = (event: globalThis.PointerEvent) => {
-      if (event.pointerId !== pointerId || !movingId.current) return;
-      const point = svgCoords(svg, event.clientX, event.clientY);
-      onHoverRef.current(point);
-      const origin = startPt.current;
-      if (!didMove.current) {
-        if (origin && Math.hypot(point.x - origin.x, point.y - origin.y) < 5) return;
-        didMove.current = true;
-      }
-      const next = { id: movingId.current, x: point.x, y: point.y };
-      dragPosRef.current = next;
-      setDragPos(next);
-    };
-    const onWinUp = (event: globalThis.PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
-      endMove();
-    };
-    window.addEventListener("pointermove", onWinMove);
-    window.addEventListener("pointerup", onWinUp);
-    window.addEventListener("pointercancel", onWinUp);
-    unbindMove.current = () => {
-      window.removeEventListener("pointermove", onWinMove);
-      window.removeEventListener("pointerup", onWinUp);
-      window.removeEventListener("pointercancel", onWinUp);
-    };
-  }
 
   function onPointerMove(event: PointerEvent<SVGSVGElement>) {
-    if (movingId.current) return;
     onHover(svgCoords(event.currentTarget, event.clientX, event.clientY));
   }
 
   function onPointerUp(event: PointerEvent<SVGSVGElement>) {
     if (event.button !== 0) return;
-    if (movingId.current) {
-      endMove();
-      return;
-    }
-    /* Stamp tools place only via palette drag — map clicks are for pipe/road/notes/select. */
+    /* Stamp tools place only via palette drag — map clicks are for pipe/road/notes. */
     if (tool && tool !== "pipeline" && tool !== "road") return;
     const point = svgCoords(event.currentTarget, event.clientX, event.clientY);
     onHit(resolveHit(point, placements));
@@ -385,9 +293,7 @@ export function VillageMap({
       ref={svgRef}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => {
-        if (!movingId.current) onHover(null);
-      }}
+      onPointerLeave={() => onHover(null)}
     >
       <defs>
         <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1">
@@ -518,28 +424,16 @@ export function VillageMap({
         if (HIDDEN.has(item.type)) return null;
         const selected = selectedId === item.id;
         const def = interventionOf(item.type);
-        const px = dragPos?.id === item.id ? dragPos.x : item.x;
-        const py = dragPos?.id === item.id ? dragPos.y : item.y;
         return (
           <g
             key={item.id}
-            transform={`translate(${px} ${py})`}
+            transform={`translate(${item.x} ${item.y})`}
             filter="url(#soft)"
             className="map-stamp"
-            style={{ cursor: noteTool ? "default" : "grab", touchAction: "none" }}
-            onPointerDown={(event) => {
-              if (event.button !== 0 || noteTool) return;
-              event.stopPropagation();
-              event.preventDefault();
-              const svg = event.currentTarget.ownerSVGElement;
-              if (!svg) return;
-              beginMove(svg, item.id, event.pointerId, event.clientX, event.clientY);
-            }}
           >
             {selected && (
               <circle r="30" fill="none" stroke="#f0c14b" strokeWidth="2.5" strokeDasharray="4 3" />
             )}
-            <circle r="28" fill="transparent" />
             <circle
               r="22"
               fill="#f7ecd4"

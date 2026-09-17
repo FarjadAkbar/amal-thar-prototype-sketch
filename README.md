@@ -9,20 +9,6 @@ This repo helps students **place their idea on Goth Sattar (Tharparkar)**, annot
 
 ---
 
-## Suggested repository name
-
-**`amal-thar-prototype-sketch`**
-
-Other options if that is taken:
-
-| Name | When to use it |
-| --- | --- |
-| `goth-sattar-sketch-lab` | Emphasises the village + student lab |
-| `amal-thar-build-activity` | Emphasises the Amal assignment |
-| `thar-village-prototype` | Shorter, product-style name |
-
----
-
 ## What this is (and is not)
 
 | This is | This is not |
